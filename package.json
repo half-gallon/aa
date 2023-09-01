@@ -1,0 +1,7 @@
+{
+  "name": "aa",
+  "packageManager": "yarn@3.5.1",
+  "dependencies": {
+    "aa": "https://github.com/eth-infinitism/account-abstraction#v0.6.0"
+  }
+}
