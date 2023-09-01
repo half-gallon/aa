@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
+import {SimpleAccount} from "aa/samples/SimpleAccount.sol";
 import {IEntryPoint} from "aa/interfaces/IEntryPoint.sol";
 import {UserOperation} from "aa/interfaces/UserOperation.sol";
 
-import {SimpleAccount} from "./SimpleAccount.sol";
 import {IKaraokeAccount} from "../interfaces/IKaraokeAccount.sol";
 import {IVerifier} from "../interfaces/Verifier.sol";
 
 contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
+    using ECDSA for bytes32;
+
     IVerifier private verifier;
     uint256 private verificationThreshold;
     uint256 public constant DEFAULT_VERIFICATION_THRESHOLD = 10 ether;
@@ -31,11 +35,15 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
 
     function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
         internal
+        view
         override
         returns (uint256 validationData)
     {
         // verify owner signature
-        super._validateSignature(userOp, userOpHash);
+        bytes32 hash = userOpHash.toEthSignedMessageHash();
+        if (owner != hash.recover(userOp.signature[0:65])) {
+            return SIG_VALIDATION_FAILED;
+        }
 
         // verify voice proof
         bytes4 selector = bytes4(userOp.callData[0:4]);
