@@ -2,6 +2,8 @@
   "name": "aa",
   "packageManager": "yarn@3.5.1",
   "dependencies": {
-    "aa": "https://github.com/eth-infinitism/account-abstraction#v0.6.0"
+    "@alchemy/aa-core": "^0.1.0-alpha.29",
+    "aa": "https://github.com/eth-infinitism/account-abstraction#v0.6.0",
+    "viem": "^1.9.5"
   }
 }
