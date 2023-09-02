@@ -3,6 +3,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
+import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol";
+
 import "aa/core/EntryPoint.sol";
 
 import "../src/account/KaraokeAccount.sol";
@@ -11,6 +13,7 @@ import "../src/account/ThresholdStore.sol";
 import "../src/verify/MockVerifier.sol";
 
 struct Deployments {
+    ERC20PresetMinterPauser yaho;
     IEntryPoint entrypoint;
     ThresholdStore thresholdStore;
     IVerifier verifier;
@@ -21,6 +24,7 @@ struct Deployments {
 library DeploymentsLib {
     function exportJson(Deployments memory v, VmSafe vm) internal {
         string memory builder = "deployments";
+        vm.serializeAddress(builder, "yaho", address(v.yaho));
         vm.serializeAddress(builder, "entrypoint", address(v.entrypoint));
         vm.serializeAddress(builder, "thresholdStore", address(v.thresholdStore));
         vm.serializeAddress(builder, "verifier", address(v.verifier));
@@ -33,22 +37,7 @@ library DeploymentsLib {
 contract Deployer is Script {
     using DeploymentsLib for Deployments;
 
-    function setUp() public view {
-        console.log("==============================");
-
-        VmSafe.Rpc[] memory rpcs = vm.rpcUrlStructs();
-
-        if (rpcs.length > 0) {
-            console.log("======== RPC ========");
-            for (uint256 i = 0; i < rpcs.length; i++) {
-                console.log("RPC.key:", rpcs[i].key);
-                console.log("RPC.url:", rpcs[i].url);
-                console.log("=====================");
-            }
-        }
-
-        console.log("==============================");
-    }
+    function setUp() public view {}
 
     function run() public {
         address owner = vm.envAddress("ADDR_OWNER");
@@ -59,13 +48,15 @@ contract Deployer is Script {
 
         vm.startBroadcast(deployerKey);
 
+        ERC20PresetMinterPauser yaho = new ERC20PresetMinterPauser("MooYaaHo", "YAHO");
         EntryPoint entrypoint = new EntryPoint();
         ThresholdStore thresholdStore = new ThresholdStore();
         MockVerifier verifier = new MockVerifier();
-        KaraokeAccountFactory factory = new KaraokeAccountFactory(IEntryPoint(owner), thresholdStore);
+        KaraokeAccountFactory factory = new KaraokeAccountFactory(entrypoint, thresholdStore);
         KaraokeAccount stdAcc = factory.createAccount(user, 0);
 
         Deployments memory deployments = Deployments({
+            yaho: yaho,
             entrypoint: entrypoint,
             thresholdStore: thresholdStore,
             verifier: verifier,
