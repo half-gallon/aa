@@ -5,10 +5,10 @@ import "forge-std/Test.sol";
 
 import "aa/core/EntryPoint.sol";
 
-import "../src/account/KaraokeAccount.sol";
-import "../src/account/KaraokeAccountFactory.sol";
-import "../src/account/ThresholdStore.sol";
-import "../src/verify/MockVerifier.sol";
+import "../contracts/account/KaraokeAccount.sol";
+import "../contracts/account/KaraokeAccountFactory.sol";
+import "../contracts/account/ThresholdStore.sol";
+import "../contracts/verify/MockVerifier.sol";
 
 contract TestKaraokeAccount is Test {
     address owner;
