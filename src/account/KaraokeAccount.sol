@@ -2,27 +2,35 @@
 pragma solidity ^0.8.13;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {SimpleAccount} from "aa/samples/SimpleAccount.sol";
 import {IEntryPoint} from "aa/interfaces/IEntryPoint.sol";
 import {UserOperation} from "aa/interfaces/UserOperation.sol";
 
+import {ByteSlicer} from "../libs/ByteSlicer.sol";
 import {IKaraokeAccount} from "../interfaces/IKaraokeAccount.sol";
+import {IThresholdStore} from "../interfaces/IThresholdStore.sol";
 import {IVerifier} from "../interfaces/Verifier.sol";
 
 contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
     using ECDSA for bytes32;
 
+    uint256 internal constant VOICE_VALIDATION_FAILED = 2;
+
+    address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
     IVerifier private verifier;
-    uint256 private verificationThreshold;
-    uint256 public constant DEFAULT_VERIFICATION_THRESHOLD = 10 ether;
+    IThresholdStore private thresholdStore;
+    ByteSlicer private slicer = new ByteSlicer();
 
-    constructor(IEntryPoint _entrypoint) SimpleAccount(_entrypoint) {}
+    constructor(IEntryPoint _entrypoint, IThresholdStore _thresholdStore) SimpleAccount(_entrypoint) {
+        thresholdStore = _thresholdStore;
+    }
 
-    function initialize(address _owner, IVerifier _verifier) public virtual initializer {
+    function initialize(address _owner) public virtual override initializer {
         super._initialize(_owner);
-        verifier = _verifier;
-        verificationThreshold = DEFAULT_VERIFICATION_THRESHOLD;
+        verifier = IVerifier(address(0));
     }
 
     function bytesToUint(bytes memory b) internal pure returns (uint256) {
@@ -31,6 +39,41 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
             number = number + uint256(uint8(b[i])) * (2 ** (8 * (b.length - (i + 1))));
         }
         return number;
+    }
+
+    function _verifyVoiceProof(bytes calldata _signature) internal view returns (bool) {
+        // get public input count
+        uint8 inputCount = uint8(_signature[65]);
+        // get public inputs
+        uint256[] memory pubInputs = new uint256[](inputCount);
+        for (uint8 i = 0; i < inputCount; i++) {
+            bytes memory pubInputRaw = _signature[66 + (i * 32):66 + (i * 32 + 32)];
+            pubInputs[i] = bytesToUint(pubInputRaw);
+        }
+        // get proof
+        bytes memory proof = _signature[66 + (inputCount * 32):];
+
+        return verifier.verify(pubInputs, proof);
+    }
+
+    function _extractTxValue(bytes calldata callData) internal view returns (address, uint256) {
+        if (bytes4(callData[0:4]) == SimpleAccount.execute.selector) {
+            // decode dest, value, func
+            (address dest, uint256 value, bytes memory func) = abi.decode(callData[4:], (address, uint256, bytes));
+
+            if (value > 0) {
+                return (ETH_ADDRESS, value);
+            }
+
+            // FIXME: hack
+            if (bytes4(slicer.slice(func, 0, 4)) == IERC20.transfer.selector) {
+                // decode to, amount
+                (, uint256 amount) = abi.decode(slicer.slice(func, 4), (address, uint256));
+                return (dest, amount);
+            }
+        }
+
+        return (address(0), 0);
     }
 
     function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
@@ -46,36 +89,14 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
         }
 
         // verify voice proof
-        bytes4 selector = bytes4(userOp.callData[0:4]);
-        if (selector == SimpleAccount.execute.selector) {
-            bytes memory callData = userOp.callData[4:];
-            (, uint256 callValue,) = abi.decode(callData, (address, uint256, bytes));
-
-            if (callValue >= verificationThreshold) {
-                // get public input count
-                uint8 inputCount = uint8(userOp.signature[65]);
-                // get public inputs
-                uint256[] memory pubInputs = new uint256[](inputCount);
-                for (uint8 i = 0; i < inputCount; i++) {
-                    bytes memory pubInputRaw = userOp.signature[66 + (i * 32):66 + (i * 32 + 32)];
-                    pubInputs[i] = bytesToUint(pubInputRaw);
-                }
-                // get proof
-                bytes memory proof = userOp.signature[66 + (inputCount * 32):];
-
-                bool ok = verifier.verify(pubInputs, proof);
-
-                if (!ok) {
-                    return SIG_VALIDATION_FAILED;
-                }
+        (address asset, uint256 amount) = _extractTxValue(userOp.callData);
+        if (amount > thresholdStore.threshold(asset)) {
+            if (!_verifyVoiceProof(userOp.signature)) {
+                return VOICE_VALIDATION_FAILED;
             }
         }
 
         return 0;
-    }
-
-    function setOwner(address _newOwner) external override onlyOwner {
-        owner = _newOwner;
     }
 
     function getVerifier() external view override returns (IVerifier) {
@@ -84,13 +105,5 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
 
     function setVerifier(IVerifier _newVerifier) external override onlyOwner {
         verifier = _newVerifier;
-    }
-
-    function getVerificationThreshold() external view override returns (uint256) {
-        return verificationThreshold;
-    }
-
-    function setVerificationThreshold(uint256 _amount) external override onlyOwner {
-        verificationThreshold = _amount;
     }
 }
