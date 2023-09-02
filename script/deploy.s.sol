@@ -34,28 +34,64 @@ library DeploymentsLib {
     }
 }
 
+struct Account {
+    address addr;
+    uint256 key;
+}
+
 contract Deployer is Script {
     using DeploymentsLib for Deployments;
 
-    function setUp() public view {}
+    Account internal owner;
+    Account internal user;
 
-    function run() public {
-        address owner = vm.envAddress("ADDR_OWNER");
-        address user = vm.envAddress("ADDR_USER");
+    address[] internal initAddrs = [
+        0x9D152d8d65ec27F7b77d27073F86abd7a4A42871,
+        0xF386C6E1bA02E1b827EC12990717C4Dc2af4F31a,
+        0x1F5aC320417F6d3b1cB76a51220B2530fdFD6125,
+        0x9f4f81832A8D552B51001D5cD97F195573deDE26,
+        0xdcA2fF91E57d1703d62d09f8f83dD5F985fc1Dc5
+    ];
 
-        uint256 deployerKey = uint256(vm.envBytes32("KEY_DEPLOYER"));
-        uint256 userKey = uint256(vm.envBytes32("KEY_USER"));
+    function fetchAccount(string memory addr, string memory key) internal view returns (Account memory) {
+        return Account({addr: vm.envAddress(addr), key: uint256(vm.envBytes32(key))});
+    }
 
-        vm.startBroadcast(deployerKey);
+    function setUp() public {
+        owner = fetchAccount("ADDR_OWNER", "KEY_OWNER");
+        user = fetchAccount("ADDR_USER", "KEY_USER");
+    }
+
+    function fuel(Deployments memory deployments, address[] memory _addrs, uint256 _key) internal {
+        vm.startBroadcast(_key);
+
+        uint256 amount = 10000 ether;
+
+        for (uint256 i = 0; i < _addrs.length; i++) {
+            {
+                deployments.yaho.mint(_addrs[i], amount);
+            }
+
+            {
+                (bool sent,) = payable(_addrs[i]).call{value: amount}("");
+                require(sent, "Failed to send Ether");
+            }
+        }
+
+        vm.stopBroadcast();
+    }
+
+    function deploy(address _user, uint256 _key) internal returns (Deployments memory deployments) {
+        vm.startBroadcast(_key);
 
         ERC20PresetMinterPauser yaho = new ERC20PresetMinterPauser("MooYaaHo", "YAHO");
         EntryPoint entrypoint = new EntryPoint();
         ThresholdStore thresholdStore = new ThresholdStore();
         MockVerifier verifier = new MockVerifier();
         KaraokeAccountFactory factory = new KaraokeAccountFactory(entrypoint, thresholdStore);
-        KaraokeAccount stdAcc = factory.createAccount(user, 0);
+        KaraokeAccount stdAcc = factory.createAccount(_user, 0);
 
-        Deployments memory deployments = Deployments({
+        deployments = Deployments({
             yaho: yaho,
             entrypoint: entrypoint,
             thresholdStore: thresholdStore,
@@ -65,7 +101,12 @@ contract Deployer is Script {
         });
 
         vm.stopBroadcast();
+    }
 
+    function run() public {
+        Deployments memory deployments = deploy(user.addr, owner.key);
         deployments.exportJson(vm);
+
+        fuel(deployments, initAddrs, owner.key);
     }
 }
