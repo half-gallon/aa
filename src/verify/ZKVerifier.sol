@@ -17,13 +17,14 @@ import {IVerifier} from "../interfaces/Verifier.sol";
 contract ZKVerifier is IVerifier {
     ZKVerifierInner private inner = new ZKVerifierInner();
 
-    function verify(uint256[] calldata pubInputs, bytes calldata proof) public view returns (bool) {
-        uint256[2] memory instances;
-        for (uint256 i = 0; i < instances.length; i++) {
-            instances[i] = pubInputs[i];
-        }
-
-        return inner.verify(instances, proof);
+    function verify(bytes calldata proof) public view returns (bool) {
+        return inner.verify(
+            [
+                uint256(1), // [0] is true if it's owner's voice
+                uint256(0) // [1] is true if it's other's voice
+            ],
+            proof
+        );
     }
 }
 

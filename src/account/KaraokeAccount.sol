@@ -41,21 +41,6 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
         return number;
     }
 
-    function _verifyVoiceProof(bytes calldata _signature) internal view returns (bool) {
-        // get public input count
-        uint8 inputCount = uint8(_signature[65]);
-        // get public inputs
-        uint256[] memory pubInputs = new uint256[](inputCount);
-        for (uint8 i = 0; i < inputCount; i++) {
-            bytes memory pubInputRaw = _signature[66 + (i * 32):66 + (i * 32 + 32)];
-            pubInputs[i] = bytesToUint(pubInputRaw);
-        }
-        // get proof
-        bytes memory proof = _signature[66 + (inputCount * 32):];
-
-        return verifier.verify(pubInputs, proof);
-    }
-
     function _extractTxValue(bytes calldata callData) internal view returns (address, uint256) {
         if (bytes4(callData[0:4]) == SimpleAccount.execute.selector) {
             // decode dest, value, func
@@ -91,7 +76,7 @@ contract KaraokeAccount is SimpleAccount, IKaraokeAccount {
         // verify voice proof
         (address asset, uint256 amount) = _extractTxValue(userOp.callData);
         if (amount > thresholdStore.threshold(asset)) {
-            if (!_verifyVoiceProof(userOp.signature)) {
+            if (!verifier.verify(userOp.signature[65:])) {
                 return VOICE_VALIDATION_FAILED;
             }
         }
