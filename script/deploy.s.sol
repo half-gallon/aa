@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol";
 
 import "aa/core/EntryPoint.sol";
@@ -30,7 +31,9 @@ library DeploymentsLib {
         vm.serializeAddress(builder, "verifier", address(v.verifier));
         vm.serializeAddress(builder, "stdAcc", address(v.stdAcc));
         builder = vm.serializeAddress(builder, "factory", address(v.factory));
-        vm.writeJson(builder, "./output/deployments.json");
+        vm.writeJson(
+            builder, string(abi.encodePacked("./output/deployments-", Strings.toString(block.chainid), ".json"))
+        );
     }
 }
 
@@ -72,16 +75,16 @@ contract Deployer is Script {
                 deployments.yaho.mint(_addrs[i], amount);
             }
 
-            {
-                (bool sent,) = payable(_addrs[i]).call{value: amount}("");
-                require(sent, "Failed to send Ether");
-            }
+            // {
+            //     (bool sent,) = payable(_addrs[i]).call{value: amount}("");
+            //     require(sent, "Failed to send Ether");
+            // }
         }
 
         vm.stopBroadcast();
     }
 
-    function deploy(address _user, uint256 _key) internal returns (Deployments memory deployments) {
+    function deploy(Account memory _user, uint256 _key) internal returns (Deployments memory deployments) {
         vm.startBroadcast(_key);
 
         ERC20PresetMinterPauser yaho = new ERC20PresetMinterPauser("MooYaaHo", "YAHO");
@@ -89,7 +92,7 @@ contract Deployer is Script {
         ThresholdStore thresholdStore = new ThresholdStore();
         MockVerifier verifier = new MockVerifier();
         KaraokeAccountFactory factory = new KaraokeAccountFactory(entrypoint, thresholdStore);
-        KaraokeAccount stdAcc = factory.createAccount(_user, 0);
+        KaraokeAccount stdAcc = factory.createAccount(_user.addr, 0);
 
         deployments = Deployments({
             yaho: yaho,
@@ -104,7 +107,7 @@ contract Deployer is Script {
     }
 
     function run() public {
-        Deployments memory deployments = deploy(user.addr, owner.key);
+        Deployments memory deployments = deploy(user, owner.key);
         deployments.exportJson(vm);
 
         fuel(deployments, initAddrs, owner.key);

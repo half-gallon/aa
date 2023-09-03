@@ -4,11 +4,9 @@ out/
 
 # Ignores development broadcast logs
 !/broadcast
-/broadcast/*/31337/
+/broadcast/*/**/*.json
+!/broadcast/*/**/run-latest.json
 /broadcast/**/dry-run/
-
-# Ignore actual output
-/output/deployments.json
 
 # Docs
 docs/
